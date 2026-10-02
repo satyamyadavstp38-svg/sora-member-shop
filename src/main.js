@@ -112,14 +112,14 @@ function friendlyAuthError(error) {
   if (message.includes('invalid path specified') || message.includes('invalid path')) {
     return 'The Supabase Project URL in Vercel includes an extra path. Use only the root URL, like https://your-project.supabase.co, without /rest/v1 or /auth/v1, then redeploy.';
   }
-  if (message.includes('otp_expired') || message.includes('invalid token') || message.includes('invalid otp') || message.includes('token has expired')) {
-    return 'That code is incorrect or expired. Check the newest email or request a fresh code.';
+  if (message.includes('otp_expired') || message.includes('email link is invalid') || message.includes('link is invalid') || message.includes('invalid token') || message.includes('token has expired')) {
+    return 'That sign-in link has expired or was already used. Return to the site and request a fresh link.';
   }
   if (message.includes('redirect') || message.includes('callback url')) {
     return 'This website address is not approved in Supabase Authentication → URL Configuration. Ask the store owner to check the allowed URLs.';
   }
   if (message.includes('rate limit') || message.includes('too many requests')) {
-    return 'Email sign-in is temporarily rate-limited. Try again later; the store owner may need to configure a custom SMTP sender in Supabase.';
+    return 'Email sign-in is temporarily rate-limited. Try again later; the store owner may need to check the email sender in Supabase.';
   }
   if (message.includes('invalid api key') || message.includes('apikey') || message.includes('unauthorized')) {
     return 'The sign-in connection is misconfigured. The store owner should check the Vercel Supabase URL and public key, then redeploy.';
@@ -138,25 +138,39 @@ function authStatusMarkup(id) {
   return `<p id="${id}" class="form-status ${statusClass}" data-auth-status role="status" aria-live="polite" aria-atomic="true">${esc(state.authStatus)}</p>`;
 }
 
-function renderOtpForm(mode = 'member') {
+function renderMagicLinkForm(mode = 'member') {
   const isAdmin = mode === 'admin';
   const prefix = isAdmin ? 'admin' : 'member';
   if (!supabaseReady) {
     if (import.meta.env.DEV && !isAdmin) {
-      return `<div class="demo-callout"><span class="demo-pulse"></span><div><strong>Demo preview is active</strong><small>Real email-code sign-in is enabled after Supabase setup.</small></div></div><button type="button" class="button button-dark button-wide" data-demo-entry="member">Continue as demo member ↗</button>`;
+      return `<div class="demo-callout"><span class="demo-pulse"></span><div><strong>Demo preview is active</strong><small>Real email-link sign-in is enabled after Supabase setup.</small></div></div><button type="button" class="button button-dark button-wide" data-demo-entry="member">Continue as demo member ↗</button>`;
     }
-    return `<div class="auth-setup-notice" role="status"><span aria-hidden="true">◌</span><div><strong>${isAdmin ? 'Admin sign-in is not configured' : 'Sign-in is not configured yet'}</strong><small>The store owner needs to connect Supabase and deploy the site before email codes can be sent.</small></div></div>`;
+    return `<div class="auth-setup-notice" role="status"><span aria-hidden="true">◌</span><div><strong>${isAdmin ? 'Admin sign-in is not configured' : 'Sign-in is not configured yet'}</strong><small>The store owner needs to connect Supabase and deploy the site before sign-in links can be sent.</small></div></div>`;
   }
 
-  if (state.authMode === mode && state.authStep === 'otp' && state.authEmail) {
-    return `<form id="${prefix}-verify-otp-form" class="portal-form signin-form otp-form" data-auth-stage="verify-otp" data-auth-mode="${mode}"><label for="${prefix}-otp-code">Six-digit email code</label><input id="${prefix}-otp-code" name="token" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" minlength="6" maxlength="6" placeholder="000000" required aria-describedby="${prefix}-auth-status"><p class="otp-destination">Sent to <strong>${esc(state.authEmail)}</strong></p>${authStatusMarkup(`${prefix}-auth-status`)}<button class="button button-dark button-wide" type="submit"><span>Verify code and continue</span><span aria-hidden="true">↗</span></button><div class="otp-secondary-actions"><button type="button" data-resend-otp data-auth-mode="${mode}">Send a new code</button><button type="button" data-change-email data-auth-mode="${mode}">Use a different email</button></div></form>`;
+  if (state.authMode === mode && state.authStep === 'link-sent' && state.authEmail) {
+    return `<div class="magic-link-sent"><span class="magic-link-icon" aria-hidden="true">✉</span><div><strong>Check your email</strong><p>We sent a sign-in link to <b>${esc(state.authEmail)}</b>.</p><small>Open the newest email link to sign in. If you don’t see it, check Spam or Promotions.</small></div></div>${authStatusMarkup(`${prefix}-auth-status`)}<div class="magic-link-actions"><button type="button" data-resend-link data-auth-mode="${mode}">Send a new link</button><button type="button" data-change-email data-auth-mode="${mode}">Use a different email</button></div>`;
   }
 
   const emailId = `${prefix}-auth-email`;
-  return `<form id="${prefix}-request-otp-form" class="portal-form signin-form" data-auth-stage="request-otp" data-auth-mode="${mode}"><label for="${emailId}">Email address</label><input id="${emailId}" name="email" type="email" inputmode="email" autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="you@example.com" value="${esc(state.authEmail)}" required>${authStatusMarkup(`${prefix}-auth-status`)}<button class="button button-dark button-wide" type="submit"><span>Send one-time code</span><span aria-hidden="true">↗</span></button><p class="auth-footnote">We’ll email you a six-digit code. Enter the code here to sign in—no link click and no password.</p></form>`;
+  return `<form id="${prefix}-request-link-form" class="portal-form signin-form" data-auth-stage="request-link" data-auth-mode="${mode}"><label for="${emailId}">Email address</label><input id="${emailId}" name="email" type="email" inputmode="email" autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="you@example.com" value="${esc(state.authEmail)}" required>${authStatusMarkup(`${prefix}-auth-status`)}<button class="button button-dark button-wide" type="submit"><span>Email me a sign-in link</span><span aria-hidden="true">↗</span></button><p class="auth-footnote">We’ll email you a secure sign-in link. Open it to continue—no password or code to type.</p></form>`;
 }
 
-async function requestEmailOtp(form) {
+function magicLinkRedirectUrl(mode) {
+  return new URL(mode === 'admin' ? '/admin' : '/', window.location.origin).toString();
+}
+
+async function sendMagicLink(email, mode) {
+  return supabase.auth.signInWithOtp({
+    email,
+    options: {
+      shouldCreateUser: mode !== 'admin',
+      emailRedirectTo: magicLinkRedirectUrl(mode),
+    },
+  });
+}
+
+async function requestMagicLink(form) {
   const email = new FormData(form).get('email')?.toString().trim();
   const mode = form.dataset.authMode === 'admin' ? 'admin' : 'member';
   const button = form.querySelector('button[type="submit"]');
@@ -168,20 +182,17 @@ async function requestEmailOtp(form) {
   state.authStatusType = '';
   button.disabled = true;
   button.setAttribute('aria-busy', 'true');
-  button.innerHTML = '<span>Sending code…</span><span aria-hidden="true">·</span>';
+  button.innerHTML = '<span>Sending link…</span><span aria-hidden="true">·</span>';
   try {
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { shouldCreateUser: mode !== 'admin' },
-    });
+    const { error } = await sendMagicLink(email, mode);
     if (error) {
       state.authStatus = friendlyAuthError(error);
       state.authStatusType = 'error';
       state.authStep = 'email';
     } else {
-      state.authStep = 'otp';
-      state.authStatus = `A six-digit code was sent to ${email}. Enter the newest code below.`;
-      state.authStatusType = 'success';
+      state.authStep = 'link-sent';
+      state.authStatus = '';
+      state.authStatusType = '';
     }
   } catch (error) {
     state.authStatus = friendlyAuthError(error);
@@ -190,91 +201,26 @@ async function requestEmailOtp(form) {
   } finally {
     button.disabled = false;
     button.removeAttribute('aria-busy');
-    button.innerHTML = '<span>Send one-time code</span><span aria-hidden="true">↗</span>';
+    button.innerHTML = '<span>Email me a sign-in link</span><span aria-hidden="true">↗</span>';
   }
   render();
-  if (state.authStep === 'otp') document.querySelector(`#${mode === 'admin' ? 'admin' : 'member'}-otp-code`)?.focus();
 }
 
-async function resendEmailOtp(button) {
+async function resendMagicLink(button) {
   const mode = button.dataset.authMode === 'admin' ? 'admin' : 'member';
   if (!supabase || !state.authEmail) return;
   button.disabled = true;
   button.textContent = 'Sending…';
   try {
-    const { error } = await supabase.auth.signInWithOtp({
-      email: state.authEmail,
-      options: { shouldCreateUser: mode !== 'admin' },
-    });
-    state.authStatus = error ? friendlyAuthError(error) : `A fresh code was sent to ${state.authEmail}. Use that newest code.`;
+    const { error } = await sendMagicLink(state.authEmail, mode);
+    state.authStatus = error ? friendlyAuthError(error) : `A fresh sign-in link was sent to ${state.authEmail}. Use the newest email link.`;
     state.authStatusType = error ? 'error' : 'success';
   } catch (error) {
     state.authStatus = friendlyAuthError(error);
     state.authStatusType = 'error';
   }
-  state.authStep = 'otp';
+  state.authStep = 'link-sent';
   render();
-  document.querySelector(`#${mode === 'admin' ? 'admin' : 'member'}-otp-code`)?.focus();
-}
-
-async function verifyEmailOtp(form) {
-  const mode = form.dataset.authMode === 'admin' ? 'admin' : 'member';
-  const token = new FormData(form).get('token')?.toString().replace(/\s/g, '') || '';
-  const status = form.querySelector('[data-auth-status]');
-  const button = form.querySelector('button[type="submit"]');
-  if (!supabase || !state.authEmail || !button) return;
-  if (!/^\d{6}$/.test(token)) {
-    if (status) { status.textContent = 'Enter the six-digit code from your latest email.'; status.classList.add('status-error'); }
-    return;
-  }
-
-  button.disabled = true;
-  button.setAttribute('aria-busy', 'true');
-  button.innerHTML = '<span>Checking code…</span><span aria-hidden="true">·</span>';
-  if (status) { status.textContent = ''; status.classList.remove('status-error', 'status-success'); }
-  try {
-    const { data, error } = await supabase.auth.verifyOtp({
-      email: state.authEmail,
-      token,
-      type: 'email',
-    });
-    if (error) {
-      if (status) { status.textContent = friendlyAuthError(error); status.classList.add('status-error'); }
-      return;
-    }
-
-    state.session = data.session;
-    state.user = data.user || data.session?.user || null;
-    state.modal = null;
-    state.authStep = 'email';
-    state.authStatus = '';
-    state.authStatusType = '';
-    if (state.user) await loadWorkspace();
-
-    if (mode === 'admin' && !state.isAdmin) {
-      state.adminDenied = true;
-      await supabase.auth.signOut();
-      state.user = null;
-      state.session = null;
-      state.isAdmin = false;
-      state.authMode = 'admin';
-      state.authEmail = '';
-      state.authStep = 'email';
-      state.authStatus = 'This email is not allow-listed for Admin. Sign in with the authorized owner account.';
-      state.authStatusType = 'error';
-    } else {
-      state.adminDenied = false;
-      state.authEmail = '';
-      showToast(mode === 'admin' ? 'Admin access confirmed.' : 'You are signed in.');
-    }
-    render();
-  } catch (error) {
-    if (status) { status.textContent = friendlyAuthError(error); status.classList.add('status-error'); }
-  } finally {
-    button.disabled = false;
-    button.removeAttribute('aria-busy');
-    button.innerHTML = '<span>Verify code and continue</span><span aria-hidden="true">↗</span>';
-  }
 }
 
 function isAdminRoute() {
@@ -559,8 +505,8 @@ function renderAdminAccessRoute() {
   const signedInNonAdmin = Boolean(state.user && !state.isAdmin && !state.demo);
   const body = signedInNonAdmin
     ? `<div class="admin-access-denied" role="alert"><span aria-hidden="true">⌑</span><div><strong>This account is not authorized for Admin.</strong><p>Sign out and use the allow-listed owner account. Admin data is protected by Supabase authorization, not this page alone.</p></div><button type="button" class="button button-outline" data-sign-out>Sign out and switch account</button></div>`
-    : renderOtpForm('admin');
-  return `<main class="admin-access-shell"><header class="admin-access-top"><a class="market-logo" href="/" aria-label="SORA Market home"><span class="market-logo-symbol">S</span><span class="market-logo-word">SORA<small>MARKET</small></span></a><span class="admin-portal-badge">RESTRICTED ADMIN ACCESS</span></header><section class="admin-access-card"><span class="admin-access-kicker">SORA / OPERATIONS</span><h1>Admin<br><em>sign-in.</em></h1><p class="admin-access-intro">Enter the email for the allow-listed owner account. We’ll send a one-time code; only an authorized Supabase admin account can open this workspace.</p>${body}<a class="admin-access-back" href="/">← Return to the shop</a></section><footer class="admin-access-foot">Protected by email verification and Supabase row-level security.</footer></main>`;
+    : renderMagicLinkForm('admin');
+  return `<main class="admin-access-shell"><header class="admin-access-top"><a class="market-logo" href="/" aria-label="SORA Market home"><span class="market-logo-symbol">S</span><span class="market-logo-word">SORA<small>MARKET</small></span></a><span class="admin-portal-badge">RESTRICTED ADMIN ACCESS</span></header><section class="admin-access-card"><span class="admin-access-kicker">SORA / OPERATIONS</span><h1>Admin<br><em>sign-in.</em></h1><p class="admin-access-intro">Enter the email for the allow-listed owner account. We’ll email a secure sign-in link; only an authorized Supabase admin account can open this workspace.</p>${body}<a class="admin-access-back" href="/">← Return to the shop</a></section><footer class="admin-access-foot">Protected by email verification and Supabase row-level security.</footer></main>`;
 }
 
 
@@ -632,7 +578,7 @@ function render() {
 }
 
 function renderSignInModal() {
-  return `<div class="modal-backdrop sign-in-backdrop" data-close-modal role="presentation"><section class="modal-card sign-in-modal" role="dialog" aria-modal="true" aria-labelledby="signin-title" data-modal-card><button class="modal-close" type="button" data-close-modal aria-label="Close sign-in dialog">×</button><div class="signin-mark" aria-hidden="true">S</div><p class="market-eyebrow">SORA MARKET ACCOUNT</p><h2 id="signin-title">Sign in to<br><em>continue.</em></h2><p class="modal-intro">${esc(state.authMessage || 'Access your account to continue to a seller, submit order details, and view your private history.')}</p>${renderOtpForm('member')}<div class="signin-policy"><span aria-hidden="true">⌑</span><p>Your account is private. We never ask for a retailer password or publish your product feedback.</p></div></section></div>`;
+  return `<div class="modal-backdrop sign-in-backdrop" data-close-modal role="presentation"><section class="modal-card sign-in-modal" role="dialog" aria-modal="true" aria-labelledby="signin-title" data-modal-card><button class="modal-close" type="button" data-close-modal aria-label="Close sign-in dialog">×</button><div class="signin-mark" aria-hidden="true">S</div><p class="market-eyebrow">SORA MARKET ACCOUNT</p><h2 id="signin-title">Sign in to<br><em>continue.</em></h2><p class="modal-intro">${esc(state.authMessage || 'Access your account to continue to a seller, submit order details, and view your private history.')}</p>${renderMagicLinkForm('member')}<div class="signin-policy"><span aria-hidden="true">⌑</span><p>Your account is private. We never ask for a retailer password or publish your product feedback.</p></div></section></div>`;
 }
 
 function renderModal() {
@@ -972,7 +918,7 @@ root.addEventListener('click', async (event) => {
   const target = event.target.closest('button, a');
   if (!target) return;
   if (target.matches('[data-demo-entry]')) { setDemoUser(target.dataset.demoEntry); return; }
-  if (target.matches('[data-resend-otp]')) { await resendEmailOtp(target); return; }
+  if (target.matches('[data-resend-link]')) { await resendMagicLink(target); return; }
   if (target.matches('[data-change-email]')) { state.authMode = target.dataset.authMode === 'admin' ? 'admin' : 'member'; state.authStep = 'email'; state.authStatus = ''; state.authStatusType = ''; render(); document.querySelector(state.authMode === 'admin' ? '#admin-auth-email' : '#member-auth-email')?.focus(); return; }
   if (target.matches('[data-open-auth]')) { openMemberSignIn('Sign in to place an order or view your account.'); return; }
   if (target.matches('[data-view]')) {
@@ -1010,17 +956,17 @@ state.orders = []; state.feedback = []; state.supportRequests = []; state.member
   if (target.matches('[data-clear-filters]')) { state.category = 'ALL'; state.searchCategory = 'ALL'; state.sellerFilter = 'ALL'; state.query = ''; state.minPrice = ''; state.maxPrice = ''; state.priceRange = 'ALL'; state.sortBy = 'featured'; render(); return; }
   if (target.matches('[data-apply-price]')) { state.priceRange = 'CUSTOM'; state.minPrice = document.querySelector('#min-price')?.value || ''; state.maxPrice = document.querySelector('#max-price')?.value || ''; render(); return; }
   if (target.matches('[data-product-link]')) {
-    if (!state.user) { openMemberSignIn('Enter your email and verify the one-time code to continue to this seller.'); return; }
+    if (!state.user) { openMemberSignIn('Sign in to continue to this seller.'); return; }
     const product = productById(target.dataset.productLink); const url = safeHttps(product?.buy_url || '');
     if (!url) { showToast('This seller link is not available yet. Please check back soon.'); return; }
     window.open(url, '_blank', 'noopener,noreferrer'); showToast('Opening the seller’s website. Checkout happens there.'); return;
   }
   if (target.matches('[data-add-order]')) {
-    if (!state.user) { state.pendingProductId = target.dataset.addOrder; openMemberSignIn('Verify your email to attach order details to your account.'); return; }
+    if (!state.user) { state.pendingProductId = target.dataset.addOrder; openMemberSignIn('Sign in to attach order details to your account.'); return; }
     state.selectedProductId = target.dataset.addOrder; state.modal = { type: 'order' }; render(); document.querySelector('#customer-name')?.focus(); return;
   }
   if (target.matches('[data-open-order-modal]')) {
-    if (!state.user) { openMemberSignIn('Verify your email to create an order record.'); return; }
+    if (!state.user) { openMemberSignIn('Sign in to create an order record.'); return; }
     state.selectedProductId = ''; state.modal = { type: 'order' }; render(); return;
   }
   if (target.matches('[data-open-feedback]')) { state.modal = { type: 'feedback', orderId: target.dataset.openFeedback }; render(); document.querySelector('#usage-period')?.focus(); return; }
@@ -1079,8 +1025,7 @@ root.addEventListener('submit', async (event) => {
     document.querySelector('#catalog-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     return;
   }
-  if (form.matches('[data-auth-stage="request-otp"]')) { await requestEmailOtp(form); return; }
-  if (form.matches('[data-auth-stage="verify-otp"]')) { await verifyEmailOtp(form); return; }
+  if (form.matches('[data-auth-stage="request-link"]')) { await requestMagicLink(form); return; }
   if (form.id === 'order-form') await submitOrder(form);
   if (form.id === 'feedback-form') await submitFeedback(form);
   if (form.id === 'support-form') await submitSupport(form);
@@ -1088,8 +1033,34 @@ root.addEventListener('submit', async (event) => {
   if (form.id === 'product-form') await submitProduct(form);
 });
 
+function consumeAuthLinkError() {
+  const url = new URL(window.location.href);
+  const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
+  const errorCode = hashParams.get('error_code') || url.searchParams.get('error_code');
+  const error = hashParams.get('error') || url.searchParams.get('error');
+  const description = hashParams.get('error_description') || url.searchParams.get('error_description');
+  if (!errorCode && !error && !description) return;
+
+  state.authMode = isAdminRoute() ? 'admin' : 'member';
+  state.authStep = 'email';
+  state.authEmail = '';
+  state.authStatus = friendlyAuthError([errorCode, error, description].filter(Boolean).join(': '));
+  state.authStatusType = 'error';
+  if (!isAdminRoute()) {
+    state.authMessage = 'That sign-in link could not be used. Request a fresh link below.';
+    state.modal = { type: 'signin' };
+  }
+
+  for (const key of ['error', 'error_code', 'error_description', 'sb']) {
+    url.searchParams.delete(key);
+  }
+  url.hash = '';
+  window.history.replaceState({}, document.title, `${url.pathname}${url.search}`);
+}
+
 async function start() {
   if (isAdminRoute()) state.authMode = 'admin';
+  consumeAuthLinkError();
   if (!supabase) {
     if (import.meta.env.DEV) {
       const requestedAdminPreview = new URLSearchParams(window.location.search).get('preview') === 'admin';

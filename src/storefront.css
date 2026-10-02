@@ -664,21 +664,28 @@ body,
   .market-product-card, .market-product-media img, .button { transition: none !important; }
 }
 
-/* Email OTP and the independent, allow-list protected Admin route */
+/* Email magic links and the independent, allow-list protected Admin route */
 .header-admin-link { display: inline-flex; align-items: center; text-decoration: none; }
 .signin-form .form-status { margin: 10px 0 11px; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .signin-form .form-status.status-success { color: #18794e; }
 .signin-form .form-status.status-error { color: #b42318; }
 .signin-form .form-status:empty { display: none; }
-.otp-form input[name="token"] {
-  min-height: 60px; text-align: center; font-size: 25px; font-weight: 700;
-  font-variant-numeric: tabular-nums; letter-spacing: .38em; padding-left: .38em;
+.magic-link-sent {
+  display: flex; align-items: flex-start; gap: 12px; margin: 15px 0 12px; padding: 15px;
+  border: 1px solid #dce9fb; border-radius: 15px; background: #f4f8ff;
 }
-.otp-destination { margin: 8px 0 4px; color: #6e6e73; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
-.otp-destination strong { color: #1d1d1f; font-weight: 650; }
-.otp-secondary-actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 13px; }
-.otp-secondary-actions button { min-height: 36px; padding: 0; border: 0; background: transparent; color: #0066cc; cursor: pointer; font-size: 12px; font-weight: 600; }
-.otp-secondary-actions button:hover { text-decoration: underline; }
+.magic-link-icon {
+  width: 36px; height: 36px; display: grid; flex: 0 0 36px; place-items: center;
+  border-radius: 50%; background: #fff; color: #0066cc; font-size: 17px;
+}
+.magic-link-sent > div { min-width: 0; }
+.magic-link-sent strong { color: #1d1d1f; font-size: 13px; }
+.magic-link-sent p { margin: 4px 0 5px; color: #42464d; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.magic-link-sent small { display: block; color: #6e6e73; font-size: 11px; line-height: 1.5; }
+.magic-link-sent b { overflow-wrap: anywhere; }
+.magic-link-actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 14px; margin-top: 10px; }
+.magic-link-actions button { min-height: 40px; padding: 0; border: 0; background: transparent; color: #0066cc; cursor: pointer; font-size: 12px; font-weight: 600; }
+.magic-link-actions button:hover { text-decoration: underline; }
 .admin-access-shell {
   min-height: 100svh; display: grid; grid-template-rows: auto 1fr auto;
   padding: 0 clamp(16px,4vw,56px); background:
@@ -747,6 +754,4 @@ body,
   .admin-return-shop { font-size: 11px; }
   .admin-portal-actions .header-signin { min-height: 36px; padding: 0 12px; font-size: 11px; }
   .admin-portal-content { width: calc(100% - 28px); }
-  .otp-form input[name="token"] { min-height: 55px; font-size: 23px; }
-  .otp-secondary-actions button { font-size: 11px; }
 }
